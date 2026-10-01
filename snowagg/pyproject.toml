@@ -1,0 +1,14 @@
+[build-system]
+requires = ["scikit-build-core>=0.8", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "snowagg"
+version = "0.1.0"
+description = "C++ port of the aggregation snowflake aggregation/riming model"
+requires-python = ">=3.8"
+dependencies = ["numpy", "scipy"]
+
+[tool.scikit-build]
+wheel.packages = ["python/snowagg"]
+cmake.build-type = "Release"
