@@ -68,13 +68,40 @@ mass = riming.rho_i * len(agg) * agg.grid_res**3        # kg
 D_max = 2 * mcs.minimum_covering_sphere(agg.X)[1]        # m
 ```
 
-## Build and install
+## Download, build and install
 
 Requirements: a C++17 compiler, CMake ≥ 3.15, Eigen3, OpenMP (optional), and
-Python with numpy, scipy, pybind11 and scikit-build-core.
+Python with numpy, scipy, pybind11 and scikit-build-core. On Debian/Ubuntu, the
+system parts are `sudo apt install build-essential cmake libeigen3-dev`.
+
+The repository is private for now, so you need to have been given access on GitHub.
+Download it with git (SSH, or `https://github.com/snilsn/snowagg.git` if you use
+HTTPS):
+
+```bash
+git clone git@github.com:snilsn/snowagg.git
+```
+
+Then build and install it into the active Python environment:
 
 ```bash
 pip install ./snowagg
+```
+
+Or download, build and install in one step:
+
+```bash
+pip install git+ssh://git@github.com/snilsn/snowagg.git
+```
+
+To update later, run `git pull` in `snowagg/` and install again.
+
+The tests compare snowagg with the original package, which they expect next to it,
+in `../aggregation` (see [the original software](#the-original-software) for the
+SciPy fix it needs):
+
+```bash
+git clone https://github.com/OPTIMICe-team/aggregation.git
 ```
 
 For development, build in place and put `python/` on `PYTHONPATH`:
