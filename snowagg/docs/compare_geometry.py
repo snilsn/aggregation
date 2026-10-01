@@ -7,7 +7,7 @@
    runs in the normal configuration, where individual runs differ (see the
    README) but the statistics are the same.
 
-usage (from the snowagg directory, original package at ../aggregation):
+usage (from the snowagg directory; the original package is at the repository root):
     python docs/compare_geometry.py [--members 300] [--workers 6]
 
 The ensemble properties are cached in docs/data/ensemble.csv; pass
@@ -28,9 +28,9 @@ import multiprocessing as mp  # noqa: E402
 import numpy as np  # noqa: E402
 from scipy import stats  # noqa: E402
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.join(HERE, "..")
-REF_DIR = os.path.abspath(os.path.join(ROOT, "..", "aggregation"))
+REF_DIR = os.path.abspath(os.path.join(ROOT, ".."))  # repository root: the original package
 sys.path.insert(0, os.path.join(ROOT, "python"))
 sys.path.insert(0, REF_DIR)
 

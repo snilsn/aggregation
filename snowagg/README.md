@@ -23,8 +23,13 @@ snowagg is a port of **[`aggregation`](https://github.com/jleinonen/aggregation)
 by Jussi Leinonen, in the version of the
 **[OPTIMICe-team fork](https://github.com/OPTIMICe-team/aggregation)** (contributions by
 Davide Ori, Markus Karrer and others). The port follows the fork at commit `f05c607`
-(2025-08-18). For use with recent SciPy, `cumtrapz` has to be imported as
-`cumulative_trapezoid` in the original's `rotator.py`; the tests need that change.
+(2025-08-18).
+
+**This repository is a fork of the original:** it is built on the original's full git
+history, and the original package is at the repository root, in `aggregation/`. It is
+unchanged except for one fix for SciPy ≥ 1.14 (`cumtrapz` is imported as
+`cumulative_trapezoid` in `rotator.py`). snowagg lives in this folder, `snowagg/`, and
+its tests compare against the original package in the same repository.
 
 All credit for the physics, the algorithms and the model design goes to the authors
 of the original. If you use snowagg, cite the original model:
@@ -76,13 +81,15 @@ system parts are `sudo apt install build-essential cmake libeigen3-dev`.
 
 The repository is private for now, so you need to have been given access on GitHub.
 Download it with git (SSH, or `https://github.com/snilsn/snowagg.git` if you use
-HTTPS):
+HTTPS). The repository contains the original package at its root and snowagg in the
+folder `snowagg/`:
 
 ```bash
 git clone git@github.com:snilsn/snowagg.git
+cd snowagg
 ```
 
-Then build and install it into the active Python environment:
+Then build snowagg and install it into the active Python environment:
 
 ```bash
 pip install ./snowagg
@@ -91,20 +98,16 @@ pip install ./snowagg
 Or download, build and install in one step:
 
 ```bash
-pip install git+ssh://git@github.com/snilsn/snowagg.git
+pip install "git+ssh://git@github.com/snilsn/snowagg.git#subdirectory=snowagg"
 ```
 
-To update later, run `git pull` in `snowagg/` and install again.
+To update later, run `git pull` in the repository and install again.
 
-The tests compare snowagg with the original package, which they expect next to it,
-in `../aggregation` (see [the original software](#the-original-software) for the
-SciPy fix it needs):
+The tests compare snowagg with the original package, which is part of this
+repository, so nothing else needs to be downloaded.
 
-```bash
-git clone https://github.com/OPTIMICe-team/aggregation.git
-```
-
-For development, build in place and put `python/` on `PYTHONPATH`:
+For development, build in place and put `python/` on `PYTHONPATH` (from the
+repository root):
 
 ```bash
 cmake -S snowagg -B snowagg/build -Dpybind11_DIR=$(python -m pybind11 --cmakedir)
@@ -157,7 +160,7 @@ Some members of the rimed dendrite ensemble (different seeds, so different parti
 ![Example aggregates from both implementations](docs/img/gallery.png)
 
 Regenerate these figures with `python docs/compare_geometry.py` (about 15 minutes on
-6 cores; the original package must be at `../aggregation`).
+6 cores; they use the original package at the repository root).
 
 ### Why the normal configuration gives different snowflakes
 
@@ -276,8 +279,8 @@ and `python docs/plot_benchmark.py`.
 
 ## How it was verified
 
-`tests/` (pytest, 86 cases) compares every part with the original, which must be
-available at `../aggregation`:
+`tests/` (pytest, 86 cases) compares every part with the original package at the
+repository root:
 
 ```bash
 cd snowagg && python -m pytest tests
@@ -340,22 +343,25 @@ walkers' index, and `required=True` retrying forever.
 ## Layout
 
 ```
-include/snowagg/   C++ core (header only)
-  rng.hpp          numpy-compatible MT19937
-  crystal.hpp      crystal geometries (+ scipy brentq port)
-  generator.hpp    lattice generator
-  rotator.hpp      rotations, SamplePDF
-  index.hpp        spatial indices with the original's item order
-  aggregate.hpp    Aggregate: merging, riming, projections, grid()
-  mcs.hpp          minimum covering sphere
-  dendrite.hpp     Reiter growth
-  deposition.hpp   deposition/sublimation random walk
-  stl.hpp          STL writer
-src/bindings.cpp   pybind11 module snowagg._core
-python/snowagg/    Python API (same module names as aggregation)
-tests/             comparisons with the original
-docs/              figure scripts, their data, the figures and the logo
-bench/, examples/  micro benchmarks, a parallel ensemble
+(repository root)      the original: setup.py, notebooks/, its README, …
+  aggregation/         the original Python package
+  snowagg/             this port
+    include/snowagg/   C++ core (header only)
+      rng.hpp          numpy-compatible MT19937
+      crystal.hpp      crystal geometries (+ scipy brentq port)
+      generator.hpp    lattice generator
+      rotator.hpp      rotations, SamplePDF
+      index.hpp        spatial indices with the original's item order
+      aggregate.hpp    Aggregate: merging, riming, projections, grid()
+      mcs.hpp          minimum covering sphere
+      dendrite.hpp     Reiter growth
+      deposition.hpp   deposition/sublimation random walk
+      stl.hpp          STL writer
+    src/bindings.cpp   pybind11 module snowagg._core
+    python/snowagg/    Python API (same module names as aggregation)
+    tests/             comparisons with the original
+    docs/              figure scripts, their data, the figures and the logo
+    bench/, examples/  micro benchmarks, a parallel ensemble
 ```
 
 ## License

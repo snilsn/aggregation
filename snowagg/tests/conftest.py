@@ -9,8 +9,9 @@ import textwrap
 import numpy as np
 import pytest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REF_DIR = os.path.abspath(os.path.join(HERE, "..", "..", "aggregation"))
+HERE = os.path.dirname(os.path.realpath(__file__))
+# the original package `aggregation` is at the root of this repository
+REF_DIR = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
 sys.path.insert(0, REF_DIR)
 

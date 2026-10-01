@@ -5,7 +5,7 @@ snowagg is timed with 1 thread and with 8 OpenMP threads. The original runs
 with numpy's default settings. Writes docs/data/benchmark.csv, which
 docs/plot_benchmark.py turns into the figures.
 
-usage (from the snowagg directory, original package at ../aggregation):
+usage (from the snowagg directory; the original package is at the repository root):
     python docs/benchmark.py [--quick]
 
 Takes about half an hour; --quick runs the small cases only (a check).
@@ -20,9 +20,9 @@ import time
 import numpy as np
 from scipy import stats
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "aggregation"))
+sys.path.insert(0, os.path.join(HERE, "..", ".."))  # repository root: the original package
 
 import aggregation  # noqa: E402
 import aggregation.dendrite  # noqa: E402

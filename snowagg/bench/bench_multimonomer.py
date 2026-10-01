@@ -10,9 +10,9 @@ import time
 import numpy as np
 from scipy import stats
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "aggregation"))
+sys.path.insert(0, os.path.join(HERE, "..", ".."))  # repository root: the original package
 impl = sys.argv[1]
 if impl == "snowagg":
     from snowagg import riming, fallvelocity, mcs
