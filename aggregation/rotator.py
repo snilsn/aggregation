@@ -20,7 +20,10 @@ SOFTWARE.
 
 import numpy as np
 from numpy import array, random, pi
-from scipy.integrate import cumtrapz
+try:
+    from scipy.integrate import cumulative_trapezoid as cumtrapz
+except ImportError:
+    from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
 
 
