@@ -1,7 +1,7 @@
 """Figures comparing the geometry of snowagg's snowflakes with the original.
 
 1. img/monomers.png: monomer lattices of all crystal types (bit-identical).
-2. img/exact_run.png: a complete aggregation + riming run in the hybrid
+2. img/exact_run*.png: three complete aggregation + riming runs in the hybrid
    configuration of tests/hybrid.py (bit-identical at every stage).
 3. img/ensemble.png, img/mass_size.png, img/gallery.png: ensembles of complete
    runs in the normal configuration, where individual runs differ (see the
@@ -43,9 +43,21 @@ RHO_I = 916.7
 KINDS = [("plate", 1.0e-3), ("column", 1.0e-3), ("needle", 1.0e-3), ("dendrite", 2.0e-3),
          ("rosette", 1.0e-3), ("bullet", 0.6e-3), ("spheroid", 0.6e-3)]
 
-EXACT_RUN = (dict(psd="exponential", size=0.5e-3, min_size=0.2e-3, max_size=1.5e-3,
-                  mono_type="dendrite", grid_res=20e-6, rimed=True),
-             dict(N=6, riming_lwp=0.1, riming_mode="subsequent", lwp_div=4), 3)
+# complete runs in the hybrid configuration (bit-identical to the original)
+EXACT_RUNS = [
+    dict(file="exact_run.png", what="Dendrites, 20 µm elements, riming after aggregation",
+         mono=dict(psd="exponential", size=0.5e-3, min_size=0.2e-3, max_size=1.5e-3,
+                   mono_type="dendrite", grid_res=20e-6, rimed=True),
+         kw=dict(N=6, riming_lwp=0.1, riming_mode="subsequent", lwp_div=4), seed=3),
+    dict(file="exact_run_columns.png", what="Columns, 20 µm elements, riming after every merge",
+         mono=dict(psd="exponential", size=0.5e-3, min_size=0.2e-3, max_size=1.5e-3,
+                   mono_type="column", grid_res=20e-6, rimed=True),
+         kw=dict(N=6, riming_lwp=0.1, riming_mode="simultaneous", lwp_div=2), seed=5),
+    dict(file="exact_run_needles.png", what="Needles, 15 µm elements, riming with rime compaction",
+         mono=dict(psd="exponential", size=0.8e-3, min_size=0.3e-3, max_size=2e-3,
+                   mono_type="needle", grid_res=15e-6, rimed=True),
+         kw=dict(N=6, riming_lwp=0.05, riming_mode="subsequent", lwp_div=3, compact_dist=0.5), seed=2),
+]
 
 CONFIGS = {
     "Rimed dendrite aggregates":
@@ -180,7 +192,7 @@ def patched(module, attrs):
             setattr(module, k, v)
 
 
-def exact_run():
+def exact_run(cfg):
     sys.path.insert(0, os.path.join(ROOT, "tests"))
     import hybrid
     from aggregation import aggregate as ref_aggregate
@@ -189,7 +201,7 @@ def exact_run():
     from snowagg import riming as S
 
     stable = _stable_sort_variant(ref_aggregate.RimedAggregate, ["add_rime_particles", "compact_rime"])
-    mono, kw, seed = EXACT_RUN
+    mono, kw, seed = cfg["mono"], cfg["kw"], cfg["seed"]
     with patched(R, hybrid.stable_reference_modules(stable)):
         st_py = [[(a.X.copy(), a.ident.copy()) for a in aggs]
                  for aggs in R.generate_rimed_aggregate(R.gen_monomer(**mono), seed=seed, iter=True, **kw)]
@@ -202,17 +214,39 @@ def exact_run():
     return st_py, st_cc, same
 
 
-def fig_exact_run():
-    st_py, st_cc, same = exact_run()
-    mono, kw, seed = EXACT_RUN
-    N = kw["N"]
-    counts = [len(s) for s in st_py]
-    # the driver yields after every merge except the last one, then after every
-    # rime increment, then the final (re-oriented) particle
-    rimed = counts.index(1)
-    picks = [(1, "after 1 merge"), (N - 2, f"after {N - 2} merges"),
-             (rimed, "all merged,\nfirst rime increment"),
-             (len(st_py) - 1, f"final, LWP {kw['riming_lwp']:g} kg m$^{{-2}}$")]
+def stage_picks(st, N, lwp):
+    """Four stages to show, with labels. The driver yields after every merge
+    except the last one, then (subsequent riming) after every rime increment,
+    then the final, re-oriented particle."""
+    counts = [len(s) for s in st]
+    last = len(st) - 1
+    multi = [k for k in range(1, last + 1) if counts[k] > 1]
+    single = counts.index(1)
+    ks = [multi[0], multi[-1], single if single < last else multi[len(multi) // 2], last]
+    ks = sorted(dict.fromkeys(ks))
+
+    def label(k):
+        if k == last:
+            return f"final, LWP {lwp:g} kg m$^{{-2}}$" if lwp else "final"
+        if counts[k] > 1:
+            m = N - counts[k]
+            return f"after {m} merge{'s' if m > 1 else ''}"
+        return "all merged,\nfirst rime increment" if k == single else f"rime increment {k - single + 1}"
+    return [(k, label(k)) for k in ks]
+
+
+def nice_length(width_mm):
+    """A round scale-bar length of about a quarter of the panel width."""
+    for length in (2, 1, 0.5, 0.25, 0.1):
+        if length <= 0.35 * width_mm:
+            return length
+    return 0.05
+
+
+def fig_exact_run(cfg):
+    st_py, st_cc, same = exact_run(cfg)
+    mono, kw, seed = cfg["mono"], cfg["kw"], cfg["seed"]
+    picks = stage_picks(st_py, kw["N"], kw.get("riming_lwp", 0.0))
     g = mono["grid_res"]
     big = lambda stage: max(stage, key=lambda t: len(t[0]))  # noqa: E731
     hw = 0.55 * max(np.ptp(big(st_py[k])[0], axis=0).max() for k, _ in picks)
@@ -228,14 +262,14 @@ def fig_exact_run():
                         transform=axes[1, j].transAxes, ha="center", va="top", fontsize=8, color=fs.INK_2)
     axes[0, 0].set_ylabel("original\n(Python)", fontsize=9, color=fs.INK)
     axes[1, 0].set_ylabel("snowagg\n(C++)", fontsize=9, color=fs.INK)
-    scale_bar(axes[1, 0], hw, 1.0)
+    scale_bar(axes[1, 0], hw, nice_length(2 * hw * 1e3))
     verdict = "bit-identical" if same else "NOT identical"
-    fig.suptitle(f"One aggregation + riming run (dendrites, 20 µm elements, seed {seed}), side view. "
-                 f"Hybrid configuration:\nall {len(st_py)} stages, every element coordinate and label {verdict}",
+    fig.suptitle(f"{cfg['what']}: one complete run (N = {kw['N']}, seed {seed}), side view\n"
+                 f"Hybrid configuration: all {len(st_py)} stages {verdict} (every element coordinate and label)",
                  fontsize=10, x=0.01, ha="left")
     fig.subplots_adjust(wspace=0.04, hspace=0.04, top=0.84)
-    fs.save(fig, "exact_run.png")
-    print(f"exact run: {len(st_py)} stages, identical={same}")
+    fs.save(fig, cfg["file"])
+    print(f"{cfg['file']}: {len(st_py)} stages, identical={same}")
 
 
 # ---- 3. ensembles, normal configuration ----------------------------------------
@@ -379,11 +413,17 @@ def main():
     ap.add_argument("--members", type=int, default=300)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--recompute", action="store_true")
+    ap.add_argument("--only", choices=["monomers", "runs", "ensembles"], help="make only these figures")
     args = ap.parse_args()
     fs.apply()
     sys.path.insert(0, os.path.join(ROOT, "tests"))
-    fig_monomers()
-    fig_exact_run()
+    if args.only in (None, "monomers"):
+        fig_monomers()
+    if args.only in (None, "runs"):
+        for cfg in EXACT_RUNS:
+            fig_exact_run(cfg)
+    if args.only is not None and args.only != "ensembles":
+        return
     rows, projs = ensembles(args.members, args.workers, args.recompute)
     for name in CONFIGS:
         for key, *_ in PROPS:

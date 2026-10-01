@@ -133,10 +133,14 @@ Monomer lattices are bit-identical in both configurations:
 
 ![Monomer lattices of all crystal types from the original and from snowagg](docs/img/monomers.png)
 
-A complete aggregation and riming run in the hybrid configuration; all stages are
-identical element by element:
+Three complete aggregation and riming runs in the hybrid configuration, with
+different monomers and riming modes; all stages are identical element by element:
 
-![One complete run, original vs snowagg, hybrid configuration](docs/img/exact_run.png)
+![One complete run of dendrites, original vs snowagg, hybrid configuration](docs/img/exact_run.png)
+
+![One complete run of columns rimed after every merge, original vs snowagg](docs/img/exact_run_columns.png)
+
+![One complete run of needles with rime compaction, original vs snowagg](docs/img/exact_run_needles.png)
 
 Ensembles of complete runs in the normal configuration. The curves are the cumulative
 distributions of size, mass, area ratio, aspect ratio and rime fraction; the
