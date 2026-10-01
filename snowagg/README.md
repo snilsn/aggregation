@@ -1,4 +1,9 @@
-# snowagg
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/logo-dark.svg">
+    <img src="docs/img/logo-light.svg" alt="snowagg" width="560">
+  </picture>
+</p>
 
 A C++ implementation of the **`aggregation`** snowflake model: 3D volume-element
 models of aggregate, rimed and deposition-grown snowflakes. snowagg has the same
@@ -252,10 +257,12 @@ include/snowagg/   C++ core (header only)
 src/bindings.cpp   pybind11 module snowagg._core
 python/snowagg/    Python API (same module names as aggregation)
 tests/             comparisons with the original
-docs/              figure scripts, their data and the figures
+docs/              figure scripts, their data, the figures and the logo
 bench/, examples/  micro benchmarks, a parallel ensemble
 ```
 
 ## License
 
-MIT, as the original; see [LICENSE](LICENSE).
+MIT, as the original; see [LICENSE](LICENSE). The logo is drawn with snowagg itself
+(`docs/make_logo.py`: dendrites on the model's element grid, with rime); the wordmark is
+set in Ubuntu.
