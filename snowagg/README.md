@@ -124,10 +124,12 @@ There are two ways to run snowagg, and both are compared with the original:
   driver and all C++ kernels, with only the few steps that numpy hands to BLAS/LAPACK
   (rotations, alignment, principal axes) done by numpy. It reproduces the original
   **bit for bit**: every element coordinate of every stage of a complete run.
-* **Normal configuration** (everything in C++): principal axes from Eigen can have the
-  opposite sign of LAPACK's, which mirrors an aligned aggregate. From that point a run
-  takes a different random path, so the same seed gives a different snowflake. The
-  snowflakes are **statistically the same**.
+* **Normal configuration** (everything in C++, what you get when you use snowagg): these
+  few steps are computed by snowagg itself, and their results can differ from numpy's in
+  the sign of an eigenvector or in the last bits. From that point on a run continues
+  differently, so the same seed gives a different snowflake. The snowflakes are
+  **statistically the same**. Why this happens and why it can't simply be avoided is
+  explained [below](#why-the-normal-configuration-gives-different-snowflakes).
 
 Monomer lattices are bit-identical in both configurations:
 
@@ -156,6 +158,70 @@ Some members of the rimed dendrite ensemble (different seeds, so different parti
 
 Regenerate these figures with `python docs/compare_geometry.py` (about 15 minutes on
 6 cores; the original package must be at `../aggregation`).
+
+### Why the normal configuration gives different snowflakes
+
+A few steps of the model are linear algebra on the whole aggregate. numpy does not
+compute them itself but hands them to a BLAS/LAPACK library:
+
+| Step | Original (numpy) | snowagg, normal configuration |
+|---|---|---|
+| Principal axes (used by `align` and `aspect_ratio`) | covariance `X.T.dot(X)` by BLAS, eigenvectors by LAPACK (`np.linalg.eigh`) | own C++ loop; the 3×3 eigenproblem by Eigen |
+| `align`, `rotate`, orientation of new monomers | matrix products (`np.dot`) by BLAS | own C++ loops (OpenMP) |
+
+Two things can come out differently:
+
+1. **Eigenvector signs.** An eigenvector is only defined up to its sign: *v* and −*v*
+   are equally correct answers. LAPACK and Eigen use different algorithms and often
+   return opposite signs for one or more axes. `align` then puts the aggregate into
+   the mirror image of the original's orientation, or turns it by 180°. The shape is
+   the same, but its elements are in different places.
+2. **Rounding in the last bits.** A sum of many numbers depends on the order in which
+   they are added and on whether fused multiply-add instructions are used. BLAS
+   libraries choose both per CPU, so coordinates can differ in the last bits (about
+   10⁻¹² relative in the tests).
+
+Either difference is enough to change the rest of the run. The model makes discrete
+decisions based on the geometry: where the next monomer first touches the aggregate,
+whether a rime particle hits an element, which grid cell of the spatial index an
+element belongs to. Once one such decision comes out differently, the following random
+numbers lead to different outcomes, and the run continues as a different snowflake.
+This is how a stochastic model behaves, not an error: the snowflake is a different
+random sample from the same distribution, as the ensemble figures above show.
+
+**Why snowagg doesn't simply call BLAS/LAPACK as numpy does.** It would not make the
+results equal to the original's, because the original is not reproducible to the last
+bit itself:
+
+* numpy uses whichever BLAS/LAPACK it was built with: usually a copy of OpenBLAS
+  bundled with numpy, MKL in some conda installations, Accelerate on macOS.
+* OpenBLAS picks a different compute kernel for each CPU type (Haswell, Skylake-X,
+  Zen, …) and splits the work according to the number of threads. Each choice can
+  change the last bits.
+* So the original gives slightly different coordinates, and after a few steps
+  different snowflakes, on different computers, with different numpy versions or
+  with different thread settings.
+
+To match it, snowagg would have to call exactly the library build that numpy uses on
+that machine. numpy doesn't make its bundled BLAS available to other compiled code,
+and such a match would break with every numpy update. The only robust way to get
+numpy's exact numbers is to let numpy compute them, which is what the hybrid
+configuration does, at the cost of copying the coordinates to numpy and back. Calling
+BLAS would not make snowagg faster either: the operations are tiny (a 3×3 eigenproblem,
+products of N×3 by 3×3 matrices) and limited by reading the coordinates from memory.
+
+Instead, snowagg's own loops add up in a fixed order, so its results don't depend on
+the number of threads or on which BLAS is installed. (Some machine dependence remains
+through numpy functions the Python driver uses; see
+[reproducibility](#random-numbers-threads-and-reproducibility).)
+
+**What this means in practice**
+
+* Compare snowagg with the original by ensembles, not by single seeds.
+* With a given seed, snowagg gives the same snowflake every time on the same machine
+  and installation.
+* The hybrid configuration in `tests/hybrid.py` exists only to prove that all C++
+  kernels and the driver are exact. It is a verification tool, not a supported mode.
 
 ## Speed
 
@@ -226,7 +292,7 @@ cd snowagg && python -m pytest tests
 | `add_rime_particles` (with and without compaction), `compact_rime` | bit-identical¹ |
 | Deposition/sublimation (`grow_ice`) | bit-identical given the same covering sphere and `arccos`² |
 | **Complete aggregation + riming runs** (7 configurations, every yielded stage) | bit-identical³ |
-| Principal axes, `align`, rotation matrices, minimum covering sphere | equal to ~1e-12 relative (numpy uses BLAS/LAPACK) |
+| Principal axes, `align`, rotation matrices, minimum covering sphere | equal to ~1e-12 relative, up to eigenvector signs ([why](#why-the-normal-configuration-gives-different-snowflakes)) |
 | Complete runs, all in C++ vs original: mass, rime mass, D_max, areas, aspect ratio | same distributions (KS tests; see the figures above) |
 
 ¹ The original's `argsort()` breaks ties among equal z values in an order that
