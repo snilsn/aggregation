@@ -5,9 +5,9 @@
   </picture>
 </p>
 
-A C++ implementation of the **`aggregation`** snowflake model: 3D volume-element
-models of aggregate, rimed and deposition-grown snowflakes. snowagg has the same
-Python API as the original, and complete model runs are about 20–90 times faster.
+The full documentation of snowagg, a C++ implementation of the **`aggregation`** snowflake
+model with the same Python API. For an overview, installation and a quick start, see the
+[repository README](../README.md).
 
 > [!WARNING]
 > **This version is completely vibe coded.** The C++ code, the Python wrappers,
@@ -23,88 +23,25 @@ snowagg is a port of **[`aggregation`](https://github.com/jleinonen/aggregation)
 by Jussi Leinonen, in the version of the
 **[OPTIMICe-team fork](https://github.com/OPTIMICe-team/aggregation)** (contributions by
 Davide Ori, Markus Karrer and others). The port follows the fork at commit `f05c607`
-(2025-08-18).
+(2025-08-18). This repository is built on the original's full git history; the original
+package is at the repository root, in `aggregation/`, and the tests compare against it.
+All credit for the model goes to its authors; please
+[cite the original papers](../README.md#credit-and-citation).
 
-**This repository is a fork of the original:** it is built on the original's full git
-history, and the original package is at the repository root, in `aggregation/`. It is
-unchanged except for one fix for SciPy ≥ 1.14 (`cumtrapz` is imported as
-`cumulative_trapezoid` in `rotator.py`). snowagg lives in this folder, `snowagg/`, and
-its tests compare against the original package in the same repository.
-
-All credit for the physics, the algorithms and the model design goes to the authors
-of the original. If you use snowagg, cite the original model:
-
-* J. Leinonen and D. Moisseev (2015): What do triple-frequency radar signatures reveal
-  about aggregate snowflakes? *J. Geophys. Res. Atmos.*, 120, 229–239,
-  [doi:10.1002/2014JD022072](https://doi.org/10.1002/2014JD022072)
-* J. Leinonen and W. Szyrmer (2015): Radar signatures of snowflake riming: A modeling
-  study. *Earth and Space Science*, 2, 346–358,
-  [doi:10.1002/2015EA000102](https://doi.org/10.1002/2015EA000102)
-* for the monomer types and the aggregation kernel of the fork: M. Karrer et al. (2020):
-  Ice particle properties inferred from aggregation modelling. *J. Adv. Model. Earth
-  Syst.*, 12, [doi:10.1029/2020MS002066](https://doi.org/10.1029/2020MS002066)
-
-## Usage
-
-Replace
-
-```python
-from aggregation import riming, mcs, fallvelocity
-```
-
-by
-
-```python
-from snowagg import riming, mcs, fallvelocity
-```
-
-The modules `aggregate, crystal, dendrite, deposition, fallvelocity, generator,
-mcs, riming, riming_runs, rotator, stl` exist under the same names. Example:
-
-```python
-import numpy as np
-from snowagg import riming, mcs
-
-gen = riming.gen_monomer(psd="exponential", size=1e-3, min_size=0.1e-3, max_size=3e-3,
-                         mono_type="dendrite", grid_res=10e-6, rimed=True)
-agg = riming.generate_rimed_aggregate(gen, N=10, riming_lwp=0.1,
-                                      riming_mode="subsequent", lwp_div=10, seed=1)
-mass = riming.rho_i * len(agg) * agg.grid_res**3        # kg
-D_max = 2 * mcs.minimum_covering_sphere(agg.X)[1]        # m
-```
-
-## Download, build and install
+## Build options and development builds
 
 Requirements: a C++17 compiler, CMake ≥ 3.15, Eigen3, OpenMP (optional), and
-Python with numpy, scipy, pybind11 and scikit-build-core. On Debian/Ubuntu, the
-system parts are `sudo apt install build-essential cmake libeigen3-dev`.
+Python with numpy and scipy. pip gets pybind11 and scikit-build-core for the build
+itself. On Debian/Ubuntu, the system parts are `sudo apt install build-essential cmake
+libeigen3-dev`.
 
-The repository is private for now, so you need to have been given access on GitHub.
-Download it with git (SSH, or `https://github.com/snilsn/snowagg.git` if you use
-HTTPS). The repository contains the original package at its root and snowagg in the
-folder `snowagg/`:
-
-```bash
-git clone git@github.com:snilsn/snowagg.git
-cd snowagg
-```
-
-Then build snowagg and install it into the active Python environment:
+From a clone of the repository (the original package is at its root, snowagg in the
+folder `snowagg/`):
 
 ```bash
-pip install ./snowagg
+pip install ./snowagg                 # build and install into the active environment
+cd snowagg && python -m pytest tests  # compare with the original (needs pytest)
 ```
-
-Or download, build and install in one step:
-
-```bash
-pip install "git+ssh://git@github.com/snilsn/snowagg.git#subdirectory=snowagg"
-```
-
-To update later, run `git pull` in the repository and install again.
-
-The tests compare snowagg with the original package, which is part of this
-repository, so nothing else needs to be downloaded.
 
 For development, build in place and put `python/` on `PYTHONPATH` (from the
 repository root):
@@ -115,9 +52,10 @@ cmake --build snowagg/build -j
 export PYTHONPATH=$PWD/snowagg/python
 ```
 
-The build uses `-march=native` by default; to build for other machines, pass
-`-DSNOWAGG_NATIVE=OFF`, or with pip `--config-settings=cmake.define.SNOWAGG_NATIVE=OFF`.
-Floating-point contraction (FMA) is disabled on purpose; see below.
+The build uses `-march=native` by default; to build for other machines (for example a
+cluster with other CPUs), pass `-DSNOWAGG_NATIVE=OFF`, or with pip
+`--config-settings=cmake.define.SNOWAGG_NATIVE=OFF`. Floating-point contraction (FMA) is
+disabled on purpose; see below.
 
 ## Same geometry as the original
 
