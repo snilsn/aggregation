@@ -31,15 +31,15 @@ On Debian/Ubuntu (other systems: install a C++17 compiler, CMake ≥ 3.15 and Ei
 
 ```bash
 sudo apt install build-essential cmake libeigen3-dev
-pip install "git+https://github.com/snilsn/snowagg.git#subdirectory=snowagg"
+pip install "git+https://github.com/snilsn/aggregation.git#subdirectory=snowagg"
 ```
 
 pip downloads the code, compiles the C++ core (about a minute) and installs the package with
 numpy and scipy. To work on the code or run the tests, clone the repository instead:
 
 ```bash
-git clone https://github.com/snilsn/snowagg.git
-pip install ./snowagg/snowagg
+git clone https://github.com/snilsn/aggregation.git
+pip install ./aggregation/snowagg
 ```
 
 Build options and development builds: [snowagg/README.md](snowagg/README.md#build-options-and-development-builds).
