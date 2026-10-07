@@ -27,6 +27,8 @@ deposition-grown snowflakes, as clouds of small volume elements. It is a C++ imp
 
 ## Install
 
+### With pip
+
 On Debian/Ubuntu (other systems: install a C++17 compiler, CMake ≥ 3.15 and Eigen 3):
 
 ```bash
@@ -34,8 +36,28 @@ sudo apt install build-essential cmake libeigen3-dev
 pip install "git+https://github.com/snilsn/aggregation.git#subdirectory=snowagg"
 ```
 
-pip downloads the code, compiles the C++ core (about a minute) and installs the package with
-numpy and scipy. To work on the code or run the tests, clone the repository instead:
+pip downloads the code, compiles the C++ core (well under a minute) and installs the package with
+numpy and scipy.
+
+### With conda
+
+snowagg is not a conda package, but conda can provide everything the build needs, so no system
+packages or root rights are required. Create an environment with the compiler, CMake and Eigen
+from conda-forge and build snowagg into it with pip:
+
+```bash
+conda create -n snowagg -c conda-forge python numpy scipy cmake eigen cxx-compiler pip git
+conda activate snowagg
+pip install "git+https://github.com/snilsn/aggregation.git#subdirectory=snowagg"
+```
+
+To add snowagg to an existing environment instead, install `cmake eigen cxx-compiler` into it
+from conda-forge and run the same `pip install`. (`mamba` works the same way.)
+
+### From a clone
+
+To work on the code or run the tests, clone the repository and install from it (in either
+environment):
 
 ```bash
 git clone https://github.com/snilsn/aggregation.git
