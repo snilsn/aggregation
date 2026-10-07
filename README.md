@@ -58,7 +58,7 @@ agg = riming.generate_rimed_aggregate(gen, N=10, riming_lwp=0.1, riming_mode="su
                                       lwp_div=10, seed=1)
 
 X = agg.X                                                     # (n, 3) element coordinates [m]
-mass = riming.rho_i * len(agg) * agg.grid_res**3              # kg
+mass = riming.rho_i * len(X) * agg.grid_res**3                # kg
 D_max = 2 * mcs.minimum_covering_sphere(X)[1]                 # m
 v = fallvelocity.fall_velocity(agg, T=263.15, P=1000e2)       # m/s
 ```
@@ -66,7 +66,9 @@ v = fallvelocity.fall_velocity(agg, T=263.15, P=1000e2)       # m/s
 Monomer types: `plate`, `column`, `needle`, `dendrite`, `rosette`, `bullet`, `spheroid`, and
 mixtures of them. Code written for `aggregation` runs unchanged with `from snowagg import ...`;
 the modules `aggregate, crystal, dendrite, deposition, fallvelocity, generator, mcs, riming,
-riming_runs, rotator, stl` have the same names and functions.
+riming_runs, rotator, stl` have the same names and functions. The example above also runs with
+the original (`from aggregation import ...`; about 40 s instead of 2 s); the same seed then gives a
+different but statistically equivalent snowflake ([why](#verified-against-the-original)).
 
 ## How it works
 
@@ -151,8 +153,9 @@ This repository is a fork of the original, with its full git history (up to the 
 fork's commit `f05c607`):
 
 * `aggregation/`, `notebooks/`, `setup.py`: the original Python package, unchanged except for one
-  fix for SciPy ≥ 1.14 (`cumtrapz` → `cumulative_trapezoid` in `rotator.py`). Install it with
-  `pip install .` from the repository root; the original's examples are in
+  fix for SciPy ≥ 1.14 (`cumtrapz` → `cumulative_trapezoid` in `rotator.py`). Its `setup.py`
+  declares no dependencies, so install them with it: `pip install . numpy scipy matplotlib` from
+  the repository root. The original's examples are in
   [notebooks/Rimed_aggregates.ipynb](notebooks/Rimed_aggregates.ipynb).
 * `snowagg/`: the C++ implementation, its tests, benchmarks and documentation.
 
