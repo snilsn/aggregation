@@ -16,6 +16,8 @@ deposition-grown snowflakes, as clouds of small volume elements. It is a C++ imp
 * **Verified against the original.** In a verification configuration, complete runs agree bit
   for bit; in normal use, the snowflakes are statistically the same.
 * **Easy to install:** one `pip install`; you only need a C++ compiler, CMake and Eigen.
+* **Documented:** a [user guide](snowagg/docs/guide.md) and [examples](snowagg/docs/examples.md)
+  with figures and complete scripts.
 
 ![One snowagg run: monomers, aggregation, riming](snowagg/docs/img/overview.png)
 
@@ -85,6 +87,10 @@ D_max = 2 * mcs.minimum_covering_sphere(X)[1]                 # m
 v = fallvelocity.fall_velocity(agg, T=263.15, P=1000e2)       # m/s
 ```
 
+Next steps: the [user guide](snowagg/docs/guide.md) explains the model and every step of a run;
+the [examples](snowagg/docs/examples.md) are complete scripts with figures (crystal types,
+riming, growth stages, deposition, a mass–size relation, saving to files).
+
 Monomer types: `plate`, `column`, `needle`, `dendrite`, `rosette`, `bullet`, `spheroid`, and
 mixtures of them. Code written for `aggregation` runs unchanged with `from snowagg import ...`;
 the modules `aggregate, crystal, dendrite, deposition, fallvelocity, generator, mcs, riming,
@@ -146,13 +152,16 @@ ensemble comparisons.
 
 ## Documentation
 
-[snowagg/README.md](snowagg/README.md) has the details:
-[verification](snowagg/README.md#how-it-was-verified),
-[why runs differ from the original](snowagg/README.md#why-the-normal-configuration-gives-different-snowflakes),
-[speed](snowagg/README.md#speed),
-[random numbers, threads and reproducibility](snowagg/README.md#random-numbers-threads-and-reproducibility),
-[differences to the original](snowagg/README.md#differences-to-the-original) and the
-[code layout](snowagg/README.md#layout).
+* [User guide](snowagg/docs/guide.md): how to use snowagg, step by step: monomers, aggregation,
+  riming, growth stages, deposition, the properties of a particle, saving, ensembles.
+* [Examples](snowagg/docs/examples.md): complete scripts with their figures.
+* [Technical details](snowagg/README.md):
+  [verification](snowagg/README.md#how-it-was-verified),
+  [why runs differ from the original](snowagg/README.md#why-the-normal-configuration-gives-different-snowflakes),
+  [speed](snowagg/README.md#speed),
+  [random numbers, threads and reproducibility](snowagg/README.md#random-numbers-threads-and-reproducibility),
+  [differences to the original](snowagg/README.md#differences-to-the-original) and the
+  [code layout](snowagg/README.md#layout).
 
 ## Credit and citation
 

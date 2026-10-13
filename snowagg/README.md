@@ -5,9 +5,10 @@
   </picture>
 </p>
 
-The full documentation of snowagg, a C++ implementation of the **`aggregation`** snowflake
-model with the same Python API. For an overview, installation and a quick start, see the
-[repository README](../README.md).
+The technical documentation of snowagg, a C++ implementation of the **`aggregation`** snowflake
+model with the same Python API: how it reproduces the original, its speed, and its differences.
+For an overview, installation and a quick start, see the [repository README](../README.md); to
+learn how to use it, the [user guide](docs/guide.md) and the [examples](docs/examples.md).
 
 > [!WARNING]
 > **This version is completely vibe coded.** The C++ code, the Python wrappers,
@@ -297,9 +298,11 @@ walkers' index, and `required=True` retrying forever.
       stl.hpp          STL writer
     src/bindings.cpp   pybind11 module snowagg._core
     python/snowagg/    Python API (same module names as aggregation)
-    tests/             comparisons with the original
-    docs/              figure scripts, their data, the figures and the logo
-    bench/, examples/  micro benchmarks, a parallel ensemble
+    tests/             comparisons with the original; the examples page is up to date
+    docs/              user guide (guide.md), examples page (examples.md), figure
+                       scripts, their data, the figures and the logo
+    examples/          the scripts of the examples page
+    bench/             micro benchmarks
 ```
 
 ## License
