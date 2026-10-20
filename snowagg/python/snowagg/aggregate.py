@@ -158,6 +158,25 @@ class Aggregate(object):
         self._c.align()
         self._changed()
 
+    def orientation_samples(self, rotator, num=10, align=True):
+        """The vertical projected areas of num orientations: for each, the area
+        along z, then align (if align) and rotate with the rotator. The
+        aggregate ends up turned num times. The same as calling
+        vertical_projected_area, align and rotate in a loop, with fewer
+        passes over the elements."""
+        if isinstance(rotator, _core.Rotator):
+            with synced as rng:
+                areas = self._c.orientation_samples(rotator, rng, int(num), bool(align))
+            self._changed()
+            return areas
+        areas = []
+        for _ in range(num):
+            areas.append(self.vertical_projected_area())
+            if align:
+                self.align()
+            self.rotate(rotator)
+        return areas
+
     def rotate(self, rotator):
         """Rotate the aggregate (around its center) with the given rotator."""
         if isinstance(rotator, _core.Rotator):

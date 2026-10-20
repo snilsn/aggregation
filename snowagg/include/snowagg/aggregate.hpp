@@ -160,19 +160,20 @@ public:
         if (update) update_coordinates();
     }
 
-    // Principal axes as columns, in descending order of length; the length
-    // of each axis is the RMS extent along it.
-    Mat3 principal_axes() const {
-        // X^T X summed in fixed blocks, so the result does not depend on
-        // the number of threads
-        constexpr int64_t B = 16384;
+    // X^T X, summed in blocks of COV_BLOCK rows: the sums of x*x, y*x, z*x,
+    // y*y, z*y, z*z of each block. The blocks are fixed, so the result does
+    // not depend on the number of threads.
+    static constexpr int64_t COV_BLOCK = 16384;
+    using CovParts = std::vector<std::array<double, 6>>;
+
+    CovParts cov_parts() const {
         const int64_t n = static_cast<int64_t>(X.size());
-        const int64_t nb = (n + B - 1) / B;
-        std::vector<std::array<double, 6>> part(nb);
+        const int64_t nb = (n + COV_BLOCK - 1) / COV_BLOCK;
+        CovParts part(nb);
 #pragma omp parallel for schedule(static) if (nb > 4)
         for (int64_t b = 0; b < nb; ++b) {
             std::array<double, 6> s{};
-            for (int64_t i = b * B; i < std::min(n, (b + 1) * B); ++i) {
+            for (int64_t i = b * COV_BLOCK; i < std::min(n, (b + 1) * COV_BLOCK); ++i) {
                 const auto& p = X[i];
                 s[0] += p[0] * p[0];
                 s[1] += p[1] * p[0];
@@ -183,6 +184,15 @@ public:
             }
             part[b] = s;
         }
+        return part;
+    }
+
+    // Principal axes as columns, in descending order of length; the length
+    // of each axis is the RMS extent along it.
+    Mat3 principal_axes() const { return principal_axes_from(cov_parts()); }
+
+    // The same from cov_parts() of the present coordinates.
+    Mat3 principal_axes_from(const CovParts& part) const {
         std::array<double, 6> t{};
         for (const auto& s : part)
             for (int k = 0; k < 6; ++k) t[k] += s[k];
@@ -212,37 +222,111 @@ public:
     }
 
     // Rotate so that the principal axes point along x, y, z (longest first).
-    void align() {
-        Mat3 PA = principal_axes();
+    void align() { align_from(principal_axes()); }
+
+    // align() with the principal axes PA already known (principal_axes_from)
+    void align_from(Mat3 PA) {
         for (int c = 0; c < 3; ++c) {
             const double n = std::sqrt(sq(PA[0][c]) + sq(PA[1][c]) + sq(PA[2][c]));
             for (int r = 0; r < 3; ++r) PA[r][c] /= n;
         }
-        right_multiply(X, PA);
+        if (X.empty()) {
+            right_multiply(X, PA);
+        } else {
+            // X . PA and the new extent in one pass
+            const int64_t n = static_cast<int64_t>(X.size());
+            double lo[3] = {INFINITY, INFINITY, INFINITY}, hi[3] = {-INFINITY, -INFINITY, -INFINITY};
+#pragma omp parallel for schedule(static) reduction(min : lo[:3]) reduction(max : hi[:3]) if (n > PAR_MIN)
+            for (int64_t i = 0; i < n; ++i) {
+                auto& p = X[i];
+                const double x = p[0], y = p[1], z = p[2];
+                p[0] = x * PA[0][0] + y * PA[1][0] + z * PA[2][0];
+                p[1] = x * PA[0][1] + y * PA[1][1] + z * PA[2][1];
+                p[2] = x * PA[0][2] + y * PA[1][2] + z * PA[2][2];
+                for (int d = 0; d < 3; ++d) {
+                    lo[d] = std::min(lo[d], p[d]);
+                    hi[d] = std::max(hi[d], p[d]);
+                }
+            }
+            for (int d = 0; d < 3; ++d) {
+                extent(d, 0) = lo[d];
+                extent(d, 1) = hi[d];
+            }
+        }
         fortran_order = false;  // np.dot(X, PA)
-        update_extent();
+        if (X.empty()) update_extent();
     }
 
-    void rotate(const Rotator& rot, Rng& rng) {
+    // parts: if given, receives cov_parts() of the rotated coordinates (it is
+    // computed in the pass that rotates them).
+    void rotate(const Rotator& rot, Rng& rng, CovParts* parts = nullptr) {
         const Vec3 m = mean_rows(X, fortran_order);
         if (rot.identity()) {
             subtract(m);
             fortran_order = true;
             update_extent();
+            if (parts) *parts = cov_parts();
             return;
         }
         const Mat3 R = rot.draw(rng);
         const int64_t n = static_cast<int64_t>(X.size());
-#pragma omp parallel for schedule(static) if (n > PAR_MIN)
-        for (int64_t i = 0; i < n; ++i) {
-            auto& p = X[i];
-            const double x = p[0] - m[0], y = p[1] - m[1], z = p[2] - m[2];
-            p[0] = R[0][0] * x + R[0][1] * y + R[0][2] * z;
-            p[1] = R[1][0] * x + R[1][1] * y + R[1][2] * z;
-            p[2] = R[2][0] * x + R[2][1] * y + R[2][2] * z;
+        const int64_t nb = (n + COV_BLOCK - 1) / COV_BLOCK;
+        if (parts) parts->assign(nb, std::array<double, 6>{});
+        double lo[3] = {INFINITY, INFINITY, INFINITY}, hi[3] = {-INFINITY, -INFINITY, -INFINITY};
+        // blocks of rows, so that the sums of the blocks are those of cov_parts()
+#pragma omp parallel for schedule(static) reduction(min : lo[:3]) reduction(max : hi[:3]) if (n > PAR_MIN)
+        for (int64_t b = 0; b < nb; ++b) {
+            std::array<double, 6> s{};
+            for (int64_t i = b * COV_BLOCK; i < std::min(n, (b + 1) * COV_BLOCK); ++i) {
+                auto& p = X[i];
+                const double x = p[0] - m[0], y = p[1] - m[1], z = p[2] - m[2];
+                p[0] = R[0][0] * x + R[0][1] * y + R[0][2] * z;
+                p[1] = R[1][0] * x + R[1][1] * y + R[1][2] * z;
+                p[2] = R[2][0] * x + R[2][1] * y + R[2][2] * z;
+                for (int d = 0; d < 3; ++d) {
+                    lo[d] = std::min(lo[d], p[d]);
+                    hi[d] = std::max(hi[d], p[d]);
+                }
+                if (parts) {
+                    s[0] += p[0] * p[0];
+                    s[1] += p[1] * p[0];
+                    s[2] += p[2] * p[0];
+                    s[3] += p[1] * p[1];
+                    s[4] += p[2] * p[1];
+                    s[5] += p[2] * p[2];
+                }
+            }
+            if (parts) (*parts)[b] = s;
+        }
+        if (n > 0) {
+            for (int d = 0; d < 3; ++d) {
+                extent(d, 0) = lo[d];
+                extent(d, 1) = hi[d];
+            }
+        } else {
+            update_extent();
         }
         fortran_order = true;  // rotator.rotate(X.T).T
-        update_extent();
+    }
+
+    // num times: the projected area along z, then align (if wanted) and
+    // rotate with rot: what get_N_rime_particles does to average the area
+    // over orientations. Returns the areas. The principal axes of each
+    // alignment come from sums made while rotating, which saves a pass over
+    // the elements; the results are those of calling the three steps one by
+    // one.
+    std::vector<double> orientation_samples(const Rotator& rot, Rng& rng, int num, bool do_align) {
+        std::vector<double> areas;
+        CovParts parts;
+        bool have_parts = false;
+        for (int s = 0; s < num; ++s) {
+            areas.push_back(projected_area(2));
+            if (do_align) align_from(principal_axes_from(have_parts ? parts : cov_parts()));
+            const bool want = do_align && s + 1 < num;
+            rotate(rot, rng, want ? &parts : nullptr);
+            have_parts = want;
+        }
+        return areas;
     }
 
     // 2D projection along dim (0, 1 or 2); grid spacing grid_res.
@@ -305,7 +389,44 @@ public:
     }
 
     double projected_area(int dim = 2) const {
-        return static_cast<double>(project_on_dim(dim).count()) * pypow(grid_res, 2);
+        int64_t count = 0;
+        if (!projected_count(dim, count)) count = project_on_dim(dim).count();
+        return static_cast<double>(count) * pypow(grid_res, 2);
+    }
+
+    // The number of cells of project_on_dim(dim) that are occupied, with the
+    // size of the grid taken from the extent instead of a pass over X (the
+    // cells are those of project_on_dim, so the count is the same). false:
+    // some element is outside that grid (the extent is not that of X), and
+    // project_on_dim has to do it.
+    bool projected_count(int dim, int64_t& count) const {
+        if (dim < 0 || dim > 2 || X.empty()) return false;
+        const int ax = (dim == 0) ? 1 : 0, ay = (dim == 2) ? 1 : 2;
+        const double ox = extent(ax, 0), oy = extent(ay, 0);
+        const double g = grid_res;
+        const double xm = npround((extent(ax, 1) - ox) / g), ym = npround((extent(ay, 1) - oy) / g);
+        if (!(xm >= 0 && ym >= 0 && xm * ym < 1e9)) return false;
+        const int64_t nx = pyint(xm) + 1, ny = pyint(ym) + 1;
+        std::vector<uint8_t> data(static_cast<size_t>(nx * ny), 0);
+        uint8_t* d = data.data();
+        const int64_t n = static_cast<int64_t>(X.size());
+        int bad = 0;
+#pragma omp parallel for schedule(static) reduction(| : bad) if (n > PAR_MIN)
+        for (int64_t i = 0; i < n; ++i) {
+            const int64_t ix = pyint(npround((X[i][ax] - ox) / g)), iy = pyint(npround((X[i][ay] - oy) / g));
+            if (ix < 0 || ix >= nx || iy < 0 || iy >= ny) {
+                bad = 1;
+            } else {
+                __atomic_store_n(&d[ix * ny + iy], uint8_t(1), __ATOMIC_RELAXED);
+            }
+        }
+        if (bad) return false;
+        int64_t c = 0;
+        const int64_t nd = static_cast<int64_t>(data.size());
+#pragma omp parallel for schedule(static) reduction(+ : c) if (nd > 1000000)
+        for (int64_t i = 0; i < nd; ++i) c += d[i];
+        count = c;
+        return true;
     }
 
     static double projected_aspect_ratio(const ProjGrid& pg) {
@@ -453,11 +574,8 @@ public:
 
         std::optional<FlatIndex2D> index2;
         if (use_indexing) index2.emplace(g, X);
-        std::optional<Index3D> index3;
-        if (compact_dist > 0 && use_indexing) {
-            index3.emplace(g);
-            index3->insert(X);
-        }
+        std::optional<FlatIndex3D> index3;
+        if (compact_dist > 0 && use_indexing) index3.emplace(g, X);
 
         Points added(N > 0 ? N : 0);
         Points ov;

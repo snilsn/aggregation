@@ -290,8 +290,10 @@ PYBIND11_MODULE(_core, m) {
         .def("principal_axes", [](const Aggregate& a) { return mat_to_array(a.principal_axes()); })
         .def("aspect_ratio", &Aggregate::aspect_ratio)
         .def("align", &Aggregate::align, py::call_guard<py::gil_scoped_release>())
-        .def("rotate", &Aggregate::rotate, py::arg("rotator"), py::arg("rng"),
-             py::call_guard<py::gil_scoped_release>())
+        .def("rotate", [](Aggregate& a, const Rotator& rot, Rng& rng) { a.rotate(rot, rng); }, py::arg("rotator"),
+             py::arg("rng"), py::call_guard<py::gil_scoped_release>())
+        .def("orientation_samples", &Aggregate::orientation_samples, py::arg("rotator"), py::arg("rng"),
+             py::arg("num") = 10, py::arg("align") = true, py::call_guard<py::gil_scoped_release>())
         .def("project_on_dim", [](const Aggregate& a, int dim) { return proj_to_array(a.project_on_dim(dim)); },
              py::arg("dim") = 2)
         .def("project_on_direction",

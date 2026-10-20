@@ -33,6 +33,41 @@ def test_thread_count_independent(tmp_path):
     assert np.array_equal(out["1"], out["16"])
 
 
+# rime particles with compaction (the 3D index) and the covering sphere on a
+# particle with more than 50000 elements: the parallel builds of the spatial
+# indices and the parallel reductions must not depend on the thread count
+COMPACT_SCRIPT = r"""
+import sys, numpy as np
+sys.path.insert(0, %r)
+from snowagg import _core, riming, mcs
+gen = riming.gen_monomer(psd="exponential", size=1e-3, min_size=0.5e-3, max_size=1.5e-3,
+                         mono_type="dendrite", grid_res=5e-6, rimed=True)
+base = riming.generate_rimed_aggregate(gen, N=3, riming_lwp=0.0, seed=4)
+X = np.ascontiguousarray(base.X)
+out = {"n": np.array(len(X))}
+for name, compact in (("plain", 0.0), ("compact", 0.5)):
+    a = _core.Aggregate(X.copy(), 5e-6, 0, True)
+    a.add_rime_particles(3000, 120e-6, compact, _core.Rng(7))
+    out[name] = np.asarray(a.X)
+c, r = mcs.minimum_covering_sphere(X)
+out["mcs"] = np.append(c, r)
+np.savez(sys.argv[1], **out)
+""" % os.path.join(HERE, "..", "python")
+
+
+def test_compaction_and_mcs_thread_count_independent(tmp_path):
+    out = {}
+    for nt in ("1", "3", "16"):
+        f = tmp_path / f"c{nt}.npz"
+        env = dict(os.environ, OMP_NUM_THREADS=nt)
+        subprocess.run([sys.executable, "-c", COMPACT_SCRIPT, str(f)], env=env, check=True)
+        out[nt] = np.load(f)
+    assert int(out["1"]["n"]) > 50000
+    for nt in ("3", "16"):
+        for k in out["1"].files:
+            assert np.array_equal(out["1"][k], out[nt][k]), (nt, k)
+
+
 def test_numpy_mode_uses_np_seed():
     gen = riming.gen_monomer(psd="monodisperse", size=0.5e-3, mono_type="plate", grid_res=20e-6, rimed=True)
     a = riming.generate_rimed_aggregate(gen, N=3, riming_lwp=0.02, riming_mode="subsequent", lwp_div=2, seed=5)

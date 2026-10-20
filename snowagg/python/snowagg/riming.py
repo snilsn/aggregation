@@ -24,12 +24,15 @@ def get_N_rime_particles(agg, rot, riming_lwp, riming_eff=1.0, align=True,
         Tuple (N_particles, area), where N_particles is the number of
         rime particles needed, and area is the averaged projected area [m^2].
     """
-    area_list = []
-    for i in range(num_area_samples):
-        area_list.append(agg.vertical_projected_area())
-        if align:
-            agg.align()
-        agg.rotate(rot)
+    if hasattr(agg, "orientation_samples"):
+        area_list = agg.orientation_samples(rot, num_area_samples, align)
+    else:
+        area_list = []
+        for i in range(num_area_samples):
+            area_list.append(agg.vertical_projected_area())
+            if align:
+                agg.align()
+            agg.rotate(rot)
     area = np.mean(area_list)
 
     vol = riming_lwp * area / rho_w

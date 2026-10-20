@@ -194,6 +194,131 @@ private:
     std::unordered_map<uint64_t, std::vector<Vec3>, detail::Key2Hash> dyn_;
 };
 
+// Same semantics and item order as Index3D (cells x-major, then y, then z;
+// insertion order within a cell), without removal. The initial points are
+// indexed in a flat CSR grid of point indices, which is much faster to build
+// than Index3D's hash map and holds no copy of the points (they must stay
+// alive and unchanged while the index is used). Points inserted later are
+// kept in a hash map and returned after the initial points of the same cell,
+// which preserves insertion order. Falls back to hashing everything if the
+// grid would be huge.
+class FlatIndex3D {
+public:
+    FlatIndex3D(double elem_size, const Points& X, int64_t max_cells = int64_t(1) << 26)
+        : elem_(elem_size), base_(&X) {
+        const int64_t n = static_cast<int64_t>(X.size());
+        if (n == 0) return;
+        std::vector<int32_t> cx(n), cy(n), cz(n);
+        int32_t xmin = INT32_MAX, xmax = INT32_MIN, ymin = INT32_MAX, ymax = INT32_MIN, zmin = INT32_MAX,
+                zmax = INT32_MIN;
+#pragma omp parallel for schedule(static) reduction(min : xmin, ymin, zmin) reduction(max : xmax, ymax, zmax) if (n > 50000)
+        for (int64_t i = 0; i < n; ++i) {
+            cx[i] = static_cast<int32_t>(X[i][0] / elem_);
+            cy[i] = static_cast<int32_t>(X[i][1] / elem_);
+            cz[i] = static_cast<int32_t>(X[i][2] / elem_);
+            xmin = std::min(xmin, cx[i]);
+            xmax = std::max(xmax, cx[i]);
+            ymin = std::min(ymin, cy[i]);
+            ymax = std::max(ymax, cy[i]);
+            zmin = std::min(zmin, cz[i]);
+            zmax = std::max(zmax, cz[i]);
+        }
+        const double span = (double(xmax) - xmin + 1) * (double(ymax) - ymin + 1) * (double(zmax) - zmin + 1);
+        if (span > double(max_cells)) {  // too sparse for a flat grid
+            for (const auto& p : X) insert(p);
+            return;
+        }
+        cx0_ = xmin;
+        cy0_ = ymin;
+        cz0_ = zmin;
+        nx_ = int64_t(xmax) - xmin + 1;
+        ny_ = int64_t(ymax) - ymin + 1;
+        nz_ = int64_t(zmax) - zmin + 1;
+        const int64_t ncells = nx_ * ny_ * nz_;
+        std::vector<uint32_t> cell(n);
+#pragma omp parallel for schedule(static) if (n > 50000)
+        for (int64_t i = 0; i < n; ++i)
+            cell[i] = static_cast<uint32_t>(((int64_t(cx[i]) - cx0_) * ny_ + (int64_t(cy[i]) - cy0_)) * nz_ +
+                                            (int64_t(cz[i]) - cz0_));
+        std::vector<int32_t>().swap(cx);
+        std::vector<int32_t>().swap(cy);
+        std::vector<int32_t>().swap(cz);
+        start_.assign(ncells + 1, 0);
+#pragma omp parallel for schedule(static) if (n > 50000)
+        for (int64_t i = 0; i < n; ++i) __atomic_fetch_add(&start_[cell[i] + 1], 1u, __ATOMIC_RELAXED);
+        for (int64_t c = 1; c <= ncells; ++c) start_[c] += start_[c - 1];
+        // stable scatter; each thread fills a range of cells, so the order
+        // within a cell is the original order independent of the threads
+        items_.resize(n);
+#pragma omp parallel if (n > 50000)
+        {
+            int nt = 1, t = 0;
+#ifdef _OPENMP
+            nt = omp_get_num_threads();
+            t = omp_get_thread_num();
+#endif
+            const uint32_t c_lo = static_cast<uint32_t>(ncells * t / nt);
+            const uint32_t c_hi = static_cast<uint32_t>(ncells * (t + 1) / nt);
+            std::vector<uint32_t> fill(start_.begin() + c_lo, start_.begin() + c_hi);
+            for (int64_t i = 0; i < n; ++i) {
+                const uint32_t c = cell[i];
+                if (c >= c_lo && c < c_hi) items_[fill[c - c_lo]++] = static_cast<uint32_t>(i);
+            }
+        }
+    }
+
+    void insert(const Vec3& p) {
+        const detail::Key3 k = {static_cast<int32_t>(p[0] / elem_), static_cast<int32_t>(p[1] / elem_),
+                                static_cast<int32_t>(p[2] / elem_)};
+        const int64_t gx = int64_t(k.x) - cx0_, gy = int64_t(k.y) - cy0_, gz = int64_t(k.z) - cz0_;
+        if (gx >= 0 && gx < nx_ && gy >= 0 && gy < ny_ && gz >= 0 && gz < nz_) {
+            if (dyn_mark_.empty()) dyn_mark_.assign((nx_ * ny_ * nz_ + 63) / 64, 0);
+            const int64_t c = (gx * ny_ + gy) * nz_ + gz;
+            dyn_mark_[c >> 6] |= uint64_t(1) << (c & 63);
+        } else {
+            dyn_outside_ = true;
+        }
+        dyn_[k].push_back(p);
+    }
+
+    template <class F>
+    void for_each_near(const Vec3& p, double search_rad, F&& f) const {
+        const double px = p[0] / elem_, py = p[1] / elem_, pz = p[2] / elem_;
+        const double rad = search_rad / elem_;
+        const int64_t x0 = pyint(px - rad), x1 = pyint(px + rad);
+        const int64_t y0 = pyint(py - rad), y1 = pyint(py + rad);
+        const int64_t z0 = pyint(pz - rad), z1 = pyint(pz + rad);
+        const Points& X = *base_;
+        for (int64_t xi = x0; xi <= x1; ++xi)
+            for (int64_t yi = y0; yi <= y1; ++yi)
+                for (int64_t zi = z0; zi <= z1; ++zi) {
+                    const int64_t gx = xi - cx0_, gy = yi - cy0_, gz = zi - cz0_;
+                    bool check_dyn = dyn_outside_;
+                    if (gx >= 0 && gx < nx_ && gy >= 0 && gy < ny_ && gz >= 0 && gz < nz_) {
+                        const int64_t c = (gx * ny_ + gy) * nz_ + gz;
+                        for (uint32_t k = start_[c]; k < start_[c + 1]; ++k) f(X[items_[k]]);
+                        check_dyn = !dyn_mark_.empty() && ((dyn_mark_[c >> 6] >> (c & 63)) & 1);
+                    }
+                    if (check_dyn) {
+                        auto it = dyn_.find({static_cast<int32_t>(xi), static_cast<int32_t>(yi),
+                                             static_cast<int32_t>(zi)});
+                        if (it != dyn_.end())
+                            for (const auto& q : it->second) f(q);
+                    }
+                }
+    }
+
+private:
+    double elem_;
+    const Points* base_;
+    int64_t cx0_ = 0, cy0_ = 0, cz0_ = 0, nx_ = 0, ny_ = 0, nz_ = 0;
+    std::vector<uint32_t> start_;
+    std::vector<uint32_t> items_;
+    std::vector<uint64_t> dyn_mark_;
+    bool dyn_outside_ = false;
+    std::unordered_map<detail::Key3, std::vector<Vec3>, detail::Key3Hash> dyn_;
+};
+
 // 3D index of points (Index3D), supporting removal.
 class Index3D {
 public:

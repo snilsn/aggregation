@@ -113,44 +113,61 @@ inline Vec3 mcsc(const Points& pts, std::vector<int64_t>& cand) {
 
 // One step of the covering-sphere reduction (mcs.find_next_candidate).
 // Returns true when finished; updates center and candidates.
-inline bool find_next_candidate(const Points& pts, Vec3& center, std::vector<int64_t>& cand,
-                                std::vector<uint8_t>& is_cand, std::vector<double>& p) {
+//
+// The Python version fills an array p with the step length of every point
+// (1 for the candidates and for points that cannot enter) and takes its
+// minimum, and the last index that attains it. The two passes are fused
+// here: only the minimum below 1 and its last index are kept (1 is the
+// value of the candidates, so the minimum never exceeds it). The partial
+// results of the threads are combined by (smaller value, then larger
+// index), which is the global answer for any number of threads.
+inline bool find_next_candidate(const Points& pts, Vec3& center, std::vector<int64_t>& cand) {
     const Vec3 t = mcsc(pts, cand);
     if (cand.size() == 4) {
         center = t;
         return true;
     }
-    const size_t n = pts.size();
-    std::fill(is_cand.begin(), is_cand.end(), 0);
-    for (auto c : cand) is_cand[c] = 1;
+    const int64_t n = static_cast<int64_t>(pts.size());
+    int64_t cid[4] = {-1, -1, -1, -1};
+    for (size_t k = 0; k < cand.size(); ++k) cid[k] = cand[k];
     const Vec3 p0 = pts[cand[0]];
     const Vec3 tc = sub(t, center);
-    for (size_t i = 0; i < n; ++i) {
-        p[i] = 1.0;
-        if (is_cand[i]) continue;
-        const Vec3& q = pts[i];
-        const double d = -((q[0] - p0[0]) * tc[0] + (q[1] - p0[1]) * tc[1] + (q[2] - p0[2]) * tc[2]);
-        if (d > 0) {
-            double s = 0;
-            for (int k = 0; k < 3; ++k) {
-                const double term = ((q[k] + p0[k]) / 2.0 - center[k]) * ((q[k] - p0[k]) / d);
-                s = (k == 0) ? term : s + term;
+    double minimum = 1.0;
+    int64_t min_index = -1;
+#pragma omp parallel if (n > 50000)
+    {
+        double m = 1.0;
+        int64_t mi = -1;
+#pragma omp for schedule(static) nowait
+        for (int64_t i = 0; i < n; ++i) {
+            if (i == cid[0] || i == cid[1] || i == cid[2] || i == cid[3]) continue;
+            const Vec3& q = pts[i];
+            const double d = -((q[0] - p0[0]) * tc[0] + (q[1] - p0[1]) * tc[1] + (q[2] - p0[2]) * tc[2]);
+            if (d > 0) {
+                double s = 0;
+                for (int k = 0; k < 3; ++k) {
+                    const double term = ((q[k] + p0[k]) / 2.0 - center[k]) * ((q[k] - p0[k]) / d);
+                    s = (k == 0) ? term : s + term;
+                }
+                const double pi = -s;
+                if (pi > 0 && pi <= m) {
+                    m = pi;
+                    mi = i;
+                }
             }
-            p[i] = -s;
+        }
+#pragma omp critical(snowagg_mcs_min)
+        if (m < minimum || (m == minimum && mi > min_index)) {
+            minimum = m;
+            min_index = mi;
         }
     }
-    double minimum = INFINITY;
-    for (size_t i = 0; i < n; ++i)
-        if (p[i] > 0 && p[i] < minimum) minimum = p[i];
-    int64_t min_index = -1;
-    for (size_t i = 0; i < n; ++i)
-        if (p[i] == minimum) min_index = static_cast<int64_t>(i);
     if (minimum == 1) {
         center = t;
         return true;
     }
     Vec3 new_center;
-    for (int k = 0; k < 3; ++k) new_center[k] = center[k] + p[min_index] * (t[k] - center[k]);
+    for (int k = 0; k < 3; ++k) new_center[k] = center[k] + minimum * (t[k] - center[k]);
     cand.insert(cand.begin(), min_index);
     const bool same = new_center == center;
     center = new_center;
@@ -164,21 +181,31 @@ inline std::pair<Vec3, double> minimum_covering_sphere(const Points& pts) {
     if (pts.empty()) throw std::invalid_argument("minimum_covering_sphere: no points");
     const Vec3 point_0 = pts[0];
     Vec3 center = point_0;
+    const int64_t n = static_cast<int64_t>(pts.size());
     int64_t point_1_index = 0;
     double max_d = -INFINITY;
-    for (size_t i = 0; i < pts.size(); ++i) {
-        const double d = std::sqrt(sq(pts[i][0] - point_0[0]) + sq(pts[i][1] - point_0[1]) +
-                                   sq(pts[i][2] - point_0[2]));
-        if (d > max_d) {
-            max_d = d;
-            point_1_index = static_cast<int64_t>(i);
+#pragma omp parallel if (n > 50000)
+    {
+        double md = -INFINITY;
+        int64_t mi = 0;
+#pragma omp for schedule(static) nowait
+        for (int64_t i = 0; i < n; ++i) {
+            const double d = std::sqrt(sq(pts[i][0] - point_0[0]) + sq(pts[i][1] - point_0[1]) +
+                                       sq(pts[i][2] - point_0[2]));
+            if (d > md) {  // the first index among equals
+                md = d;
+                mi = i;
+            }
+        }
+#pragma omp critical(snowagg_mcs_far)
+        if (md > max_d || (md == max_d && mi < point_1_index)) {
+            max_d = md;
+            point_1_index = mi;
         }
     }
     std::vector<int64_t> cand = {point_1_index};
-    std::vector<uint8_t> is_cand(pts.size());
-    std::vector<double> p(pts.size());
     bool finished = false;
-    while (!finished) finished = mcs_detail::find_next_candidate(pts, center, cand, is_cand, p);
+    while (!finished) finished = mcs_detail::find_next_candidate(pts, center, cand);
     const Vec3 diff = mcs_detail::sub(pts[cand[0]], center);
     return {center, std::sqrt(mcs_detail::dot(diff, diff))};
 }
