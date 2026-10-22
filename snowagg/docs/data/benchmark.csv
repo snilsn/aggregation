@@ -1,27 +1,27 @@
-# cpu: AMD Ryzen 7 7840HS with Radeon 780M Graphics; python 3.10.12, numpy 1.26.0; 2026-10-01
+# cpu: AMD Ryzen 7 7840HS with Radeon 780M Graphics; python 3.10.12, numpy 1.26.0; 2026-10-22; snowagg: best of 3 runs (one run for N > 20)
 kind,case,impl,threads,N,elements,seconds
-case,Reiter dendrite growth (400x400 grid),original,,,33264,16.7596
-case,"Aggregation, 20 dendrites (10 µm)",original,,,229398,5.3458
-case,"Aggregation + riming, 10 dendrites (10 µm, LWP 0.1, lwp_div 10)",original,,,435867,46.7252
-scaling,multiple_monomer_test workload,original,,2,29560,22.9525
-scaling,multiple_monomer_test workload,original,,5,54939,61.1082
-scaling,multiple_monomer_test workload,original,,10,162993,153.0366
-scaling,multiple_monomer_test workload,original,,20,532037,461.5633
-case,Reiter dendrite growth (400x400 grid),snowagg,1,,33264,7.3708
-case,"Aggregation, 20 dendrites (10 µm)",snowagg,1,,229398,0.0935
-case,"Aggregation + riming, 10 dendrites (10 µm, LWP 0.1, lwp_div 10)",snowagg,1,,465878,1.1729
-scaling,multiple_monomer_test workload,snowagg,1,2,29539,1.3393
-scaling,multiple_monomer_test workload,snowagg,1,5,60679,2.3873
-scaling,multiple_monomer_test workload,snowagg,1,10,159518,5.7871
-scaling,multiple_monomer_test workload,snowagg,1,20,550541,18.5245
-scaling,multiple_monomer_test workload,snowagg,1,50,1149821,46.8440
-scaling,multiple_monomer_test workload,snowagg,1,100,2414407,103.7432
-case,Reiter dendrite growth (400x400 grid),snowagg,8,,33264,2.0905
-case,"Aggregation, 20 dendrites (10 µm)",snowagg,8,,229398,0.0571
-case,"Aggregation + riming, 10 dendrites (10 µm, LWP 0.1, lwp_div 10)",snowagg,8,,465878,1.0186
-scaling,multiple_monomer_test workload,snowagg,8,2,29539,1.3411
-scaling,multiple_monomer_test workload,snowagg,8,5,60679,2.1376
-scaling,multiple_monomer_test workload,snowagg,8,10,159518,2.7562
-scaling,multiple_monomer_test workload,snowagg,8,20,550541,6.5752
-scaling,multiple_monomer_test workload,snowagg,8,50,1149821,17.3804
-scaling,multiple_monomer_test workload,snowagg,8,100,2414407,54.4456
+case,Reiter dendrite growth (400x400 grid),original,,,33264,16.0389
+case,"Aggregation, 20 dendrites (10 µm)",original,,,229398,4.7596
+case,"Aggregation + riming, 10 dendrites (10 µm, LWP 0.1, lwp_div 10)",original,,,435867,47.4161
+scaling,multiple_monomer_test workload,original,,2,29560,21.9381
+scaling,multiple_monomer_test workload,original,,5,54939,77.6790
+scaling,multiple_monomer_test workload,original,,10,162993,176.0960
+scaling,multiple_monomer_test workload,original,,20,532037,574.5418
+case,Reiter dendrite growth (400x400 grid),snowagg,1,,33264,7.8642
+case,"Aggregation, 20 dendrites (10 µm)",snowagg,1,,229398,0.1117
+case,"Aggregation + riming, 10 dendrites (10 µm, LWP 0.1, lwp_div 10)",snowagg,1,,465878,1.4861
+scaling,multiple_monomer_test workload,snowagg,1,2,29539,0.9311
+scaling,multiple_monomer_test workload,snowagg,1,5,60679,1.8232
+scaling,multiple_monomer_test workload,snowagg,1,10,159518,4.6919
+scaling,multiple_monomer_test workload,snowagg,1,20,550541,16.1405
+scaling,multiple_monomer_test workload,snowagg,1,50,1149821,47.6090
+scaling,multiple_monomer_test workload,snowagg,1,100,2414407,116.6227
+case,Reiter dendrite growth (400x400 grid),snowagg,8,,33264,2.2911
+case,"Aggregation, 20 dendrites (10 µm)",snowagg,8,,229398,0.1306
+case,"Aggregation + riming, 10 dendrites (10 µm, LWP 0.1, lwp_div 10)",snowagg,8,,465878,1.4924
+scaling,multiple_monomer_test workload,snowagg,8,2,29539,0.9570
+scaling,multiple_monomer_test workload,snowagg,8,5,60679,1.6570
+scaling,multiple_monomer_test workload,snowagg,8,10,159518,2.3531
+scaling,multiple_monomer_test workload,snowagg,8,20,550541,7.2189
+scaling,multiple_monomer_test workload,snowagg,8,50,1149821,27.5133
+scaling,multiple_monomer_test workload,snowagg,8,100,2414407,54.7670

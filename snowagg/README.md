@@ -168,33 +168,47 @@ through numpy functions the Python driver uses; see
 ## Speed
 
 Measured with `docs/benchmark.py` on an AMD Ryzen 7 7840HS laptop (8 cores; snowagg
-built with `-march=native`, the original with numpy 1.26 and its default settings).
-Every workload runs with the same parameters and seed in both implementations.
+built with `-march=native`, the original with numpy 1.26 and its default settings),
+on 2026-10-22. Every workload runs with the same parameters and seed in both
+implementations. For snowagg the shortest of 3 runs is kept (one run for N > 20).
+The times of a laptop vary from day to day by 10–30 % (the original's N = 20 run took
+462 s on 2026-10-01 and 575 s on 2026-10-22), so compare the columns, not the days.
 
 ![Run times of several workloads](docs/img/speed_cases.png)
 
 | Workload | original | snowagg, 1 thread | snowagg, 8 threads |
 |---|---|---|---|
-| Reiter dendrite growth, 400×400 grid | 16.8 s | 7.4 s (2.3×) | 2.1 s (8×) |
-| Aggregation of 20 dendrites, 10 µm elements | 5.3 s | 0.09 s (57×) | 0.06 s (94×) |
-| Aggregation + riming, 10 dendrites, 10 µm, LWP 0.1, `lwp_div` 10 | 46.7 s | 1.2 s (40×) | 1.0 s (46×) |
-| `multiple_monomer_test.py` workload, N = 10 (0.16 M elements) | 153 s | 5.8 s (26×) | 2.8 s (56×) |
-| same, N = 20 (0.55 M elements) | 462 s | 18.5 s (25×) | 6.6 s (70×) |
-| same, N = 100 (2.4 M elements) | – | 104 s | 54 s |
+| Reiter dendrite growth, 400×400 grid | 16.0 s | 7.9 s (2×) | 2.3 s (7×) |
+| Aggregation of 20 dendrites, 10 µm elements | 4.8 s | 0.11 s (43×) | 0.13 s (36×) |
+| Aggregation + riming, 10 dendrites, 10 µm, LWP 0.1, `lwp_div` 10 | 47.4 s | 1.5 s (32×) | 1.5 s (32×) |
+| `multiple_monomer_test.py` workload, N = 10 (0.16 M elements) | 176 s | 4.7 s (38×) | 2.4 s (75×) |
+| same, N = 20 (0.55 M elements) | 575 s | 16.1 s (36×) | 7.2 s (80×) |
+| same, N = 100 (2.4 M elements) | – | 117 s | 54.8 s |
 
 ![Run time and speed-up against the number of monomers](docs/img/speed_scaling.png)
 
 * The original's Reiter growth is already vectorized numpy, so the gain there is
   small; aggregation and riming, which loop in Python, gain the most.
-* Riming costs about 2.3 µs per rime particle. With a large `lwp_div` most of the
-  time goes into the 10 projected-area samples (each with align and rotate) per
-  riming increment, which the model prescribes.
+* With a large `lwp_div` most of the time goes into the 10 projected-area samples
+  (each with align and rotate) per riming increment, which the model prescribes.
+  They run in one C++ call (`Aggregate.orientation_samples`), and the projected area
+  takes the size of its grid from the extent. The spatial index of the compaction step
+  is a flat grid, and the minimum covering sphere makes one parallel pass per
+  iteration. Together this made the `multiple_monomer_test` workload about 1.3×
+  faster than the first version of snowagg on 1 thread (N = 10: 6.3 s → 4.7 s;
+  N = 20: 20.9 s → 16.4 s, measured side by side) and about 1.2× on 8 threads, with
+  bit-identical results.
 * Threads help most for large aggregates; the work is memory bound, so 8 threads
-  give at most about 3× over 1 thread. For many runs, one single-threaded process per
+  give about 2× over 1 thread. For many runs, one single-threaded process per
   run is faster (`examples/parallel_ensemble.py`).
+* The times of 8 threads on a laptop fluctuate more than those of 1 thread (the
+  threads are moved between cores while other programs run, and the first runs
+  of a process are slower while the cores speed up), which is why the benchmark
+  runs a few seconds of untimed work first.
 
-Regenerate with `python docs/benchmark.py` (about 30 minutes, mostly the original)
-and `python docs/plot_benchmark.py`.
+Regenerate with `python docs/benchmark.py` (about 30 minutes, mostly the original;
+`--only snowagg-1` or `--only snowagg-8` repeats one setting and keeps the other
+rows) and `python docs/plot_benchmark.py`.
 
 ## Random numbers, threads and reproducibility
 

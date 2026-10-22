@@ -6,9 +6,13 @@ with numpy's default settings. Writes docs/data/benchmark.csv, which
 docs/plot_benchmark.py turns into the figures.
 
 usage (from the snowagg directory; the original package is at the repository root):
-    python docs/benchmark.py [--quick]
+    python docs/benchmark.py [--quick] [--only original|snowagg-1|snowagg-8]
 
-Takes about half an hour; --quick runs the small cases only (a check).
+Takes about half an hour, mostly the original; --quick runs the small cases only
+(a check). --only runs one setting and replaces its rows in the CSV (so the slow
+original need not be repeated). A full run does each setting in a process of
+its own. The shortest of 3 runs is kept for the snowagg cases with N <= 20 (the
+time of the first runs of a process varies, see warm_up).
 """
 import argparse
 import csv
@@ -16,6 +20,14 @@ import os
 import platform
 import sys
 import time
+
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--quick", action="store_true")
+_ap.add_argument("--only", choices=["original", "snowagg-1", "snowagg-8"])
+_ap.add_argument("--out", default=None)
+ARGS = _ap.parse_args()
+if ARGS.only == "snowagg-1":
+    os.environ["OMP_NUM_THREADS"] = "1"  # before the OpenMP runtime starts
 
 import numpy as np
 from scipy import stats
@@ -86,20 +98,40 @@ SCALING_N = {"original": [2, 5, 10, 20], "snowagg": [2, 5, 10, 20, 50, 100]}
 QUICK = {"cases": [CASES[0]], "N": {"original": [2], "snowagg": [2]}}
 
 
-def timed(fn, pkg):
+def warm_up(pkg):
+    """A few seconds of work that is not timed: the first parallel runs of a
+    process are slow (threads start, the cores speed up from idle), which a
+    single timed run of a few seconds would measure."""
     t0 = time.perf_counter()
-    out = fn(pkg)
-    return out, time.perf_counter() - t0
+    while time.perf_counter() - t0 < 4.0:
+        pkg.dendrite.generate_dendrite(1.0, 0.4, 0.001, grid_size=200, num_iter=3000)
+
+
+def timed(fn, pkg, repeats=1):
+    """The result and the shortest of `repeats` run times."""
+    best = float("inf")
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        out = fn(pkg)
+        best = min(best, time.perf_counter() - t0)
+    return out, best
+
+
+SETTINGS = {"original": ("original", None), "snowagg-1": ("snowagg", 1), "snowagg-8": ("snowagg", 8)}
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--quick", action="store_true")
-    ap.add_argument("--out", default=os.path.join(HERE, "data", "benchmark.csv"))
-    args = ap.parse_args()
+    args = ARGS
+    out = args.out or os.path.join(HERE, "data", "benchmark.csv")
+    if args.only is None:  # each setting in a process of its own (the OpenMP environment differs)
+        import subprocess
+        for name in SETTINGS:
+            subprocess.run([sys.executable, os.path.abspath(__file__), "--only", name, "--out", out]
+                           + (["--quick"] if args.quick else []), check=True)
+        return
     cases = QUICK["cases"] if args.quick else CASES
     scaling = QUICK["N"] if args.quick else SCALING_N
-    settings = [("original", None), ("snowagg", 1), ("snowagg", 8)]
+    names = [args.only]
     rows = []
 
     def record(kind, label, impl, threads, N, n_el, dt):
@@ -107,25 +139,38 @@ def main():
                          seconds=f"{dt:.4f}"))
         print(f"{label:60s} {impl:8s} threads={threads or '-':2} {dt:9.2f} s  {n_el} elements", flush=True)
 
-    for impl, threads in settings:
+    for name in names:
+        impl, threads = SETTINGS[name]
         if threads:
             snowagg.set_num_threads(threads)
         pkg = IMPLS[impl]
+        if impl == "snowagg":
+            warm_up(pkg)
+        reps = 3 if impl == "snowagg" else 1  # the original takes minutes per run
         for label, fn in cases:
-            n_el, dt = timed(fn, pkg)
+            n_el, dt = timed(fn, pkg, reps)
             record("case", label, impl, threads, "", n_el, dt)
         for N in scaling[impl]:
-            n_el, dt = timed(case_multimonomer(N), pkg)
+            n_el, dt = timed(case_multimonomer(N), pkg, reps if N <= 20 else 1)
             record("scaling", "multiple_monomer_test workload", impl, threads, N, n_el, dt)
 
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    with open(args.out, "w", newline="") as f:
+    if os.path.exists(out):  # keep the rows of the other settings
+        with open(out, newline="") as f:
+            f.readline()
+            old = list(csv.DictReader(f))
+        impl, threads = SETTINGS[args.only]
+        keep = [r for r in old if not (r["impl"] == impl and r["threads"] == (str(threads) if threads else ""))]
+        rows = keep + rows
+        rows.sort(key=lambda r: (["original", "snowagg"].index(r["impl"]), int(r["threads"] or 0), r["kind"] != "case"))
+
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", newline="") as f:
         f.write(f"# cpu: {cpu_name()}; python {platform.python_version()}, numpy {np.__version__}; "
-                f"{time.strftime('%Y-%m-%d')}\n")
+                f"{time.strftime('%Y-%m-%d')}; snowagg: best of 3 runs (one run for N > 20)\n")
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    print("wrote", args.out)
+    print("wrote", out)
 
 
 def cpu_name():
